@@ -215,14 +215,8 @@ int ping_v6_sendmsg(struct kiocb *iocb, struct sock *sk, struct msghdr *msg,
 	}
 	release_sock(sk);
 
-/* 2013-11-25 hobbes.song LGP_DATA_CTS_IPV6_PINGTEST [START] */
-	release_sock(sk);
-	if(err)
-/* 2013-11-25 hobbes.song LGP_DATA_CTS_IPV6_PINGTEST [END] */		
+	if (err)
 		return err;
 
-/* 2013-11-25 hobbes.song LGP_DATA_CTS_IPV6_PINGTEST [START] */
 	return len;
-/* 2013-11-25 hobbes.song LGP_DATA_CTS_IPV6_PINGTEST [END] */
-
 }
