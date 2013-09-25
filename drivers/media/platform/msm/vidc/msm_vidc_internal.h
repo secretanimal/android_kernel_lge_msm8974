@@ -181,6 +181,7 @@ struct msm_vidc_core_capability {
 	struct hal_capability_supported height;
 	struct hal_capability_supported frame_rate;
 	struct hal_capability_supported hier_p;
+	u32 pixelprocess_capabilities;
 	u32 capability_set;
 };
 
