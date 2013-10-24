@@ -3033,7 +3033,7 @@ static struct v4l2_ctrl **get_super_cluster(struct msm_vidc_inst *inst,
 int msm_venc_ctrl_init(struct msm_vidc_inst *inst)
 {
 	int idx = 0;
-	struct v4l2_ctrl_config ctrl_cfg;
+	struct v4l2_ctrl_config ctrl_cfg = {0};
 	int ret_val = 0;
 	int cluster_size = 0;
 
