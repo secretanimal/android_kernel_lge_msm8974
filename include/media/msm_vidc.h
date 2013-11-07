@@ -201,7 +201,6 @@ struct msm_vidc_s3d_frame_packing_payload {
         unsigned int fpa_repetition_period;
         unsigned int fpa_extension_flag;
 };
-
 enum msm_vidc_extradata_type {
     MSM_VIDC_EXTRADATA_NONE = 0x00000000,
     MSM_VIDC_EXTRADATA_MB_QUANTIZATION = 0x00000001,
