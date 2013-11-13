@@ -140,7 +140,8 @@ enum msm_venc_ctrl_cluster {
 	MSM_VENC_CTRL_CLUSTER_TIMING = 1 << 9,
 	MSM_VENC_CTRL_CLUSTER_VP8_PROFILE_LEVEL = 1 << 10,
 	MSM_VENC_CTRL_CLUSTER_DEINTERLACE = 1 << 11,
-	MSM_VENC_CTRL_CLUSTER_MAX = 1 << 12,
+	MSM_VENC_CTRL_CLUSTER_USE_LTRFRAME = 1 << 12,
+	MSM_VENC_CTRL_CLUSTER_MAX = 1 << 13,
 };
 
 static struct msm_vidc_ctrl msm_venc_ctrls[] = {
@@ -773,7 +774,6 @@ static struct msm_vidc_ctrl msm_venc_ctrls[] = {
 		.default_value = V4L2_CID_MPEG_VIDC_VIDEO_DEINTERLACE_DISABLED,
 		.step = 1,
 		.cluster = MSM_VENC_CTRL_CLUSTER_DEINTERLACE,
-
 	},
 	{
 		.id = V4L2_CID_MPEG_VIDC_VIDEO_USELTRFRAME,
@@ -783,6 +783,7 @@ static struct msm_vidc_ctrl msm_venc_ctrls[] = {
 		.maximum = 1,
 		.default_value = 0,
 		.step = 1,
+		.cluster = 0,
 	},
 	{
 		.id = V4L2_CID_MPEG_VIDC_VIDEO_LTRCOUNT,
@@ -793,6 +794,7 @@ static struct msm_vidc_ctrl msm_venc_ctrls[] = {
 		.default_value = 0,
 		.step = 1,
 		.qmenu = NULL,
+		.cluster = MSM_VENC_CTRL_CLUSTER_USE_LTRFRAME,
 	},
 	{
 		.id = V4L2_CID_MPEG_VIDC_VIDEO_LTRMODE,
@@ -803,6 +805,7 @@ static struct msm_vidc_ctrl msm_venc_ctrls[] = {
 		.default_value = V4L2_MPEG_VIDC_VIDEO_LTR_MODE_DISABLE,
 		.step = 1,
 		.qmenu = NULL,
+		.cluster = MSM_VENC_CTRL_CLUSTER_USE_LTRFRAME,
 	},
 	{
 		.id = V4L2_CID_MPEG_VIDC_VIDEO_MARKLTRFRAME,
@@ -812,6 +815,7 @@ static struct msm_vidc_ctrl msm_venc_ctrls[] = {
 		.maximum = 0,
 		.default_value = 0,
 		.step = 0,
+        .cluster = 0,
 	},
 	{
 		.id = V4L2_CID_MPEG_VIDC_VIDEO_HIER_P_NUM_LAYERS,
@@ -2271,6 +2275,18 @@ static int try_set_ctrl(struct msm_vidc_inst *inst, struct v4l2_ctrl *ctrl)
 		pdata = &enable;
 		break;
 	}
+	case V4L2_CID_MPEG_VIDC_VIDEO_USELTRFRAME:
+		property_id = HAL_CONFIG_VENC_USELTRFRAME;
+		useltr.refltr = 0x1;
+		useltr.useconstrnt = false;
+		useltr.frames = 0;
+		pdata = &useltr;
+		break;
+	case V4L2_CID_MPEG_VIDC_VIDEO_MARKLTRFRAME:
+		property_id = HAL_CONFIG_VENC_MARKLTRFRAME;
+		markltr.markframe = 0x1;
+		pdata = &markltr;
+		break;
 	default:
 		dprintk(VIDC_ERR, "Unsupported index: %x\n", ctrl->id);
 		rc = -ENOTSUPP;
@@ -2289,6 +2305,15 @@ static int try_set_ctrl(struct msm_vidc_inst *inst, struct v4l2_ctrl *ctrl)
 	return rc;
 }
 
+static struct v4l2_ctrl *get_cluster_from_id(int id)
+{
+	int c;
+	for (c = 0; c < ARRAY_SIZE(msm_venc_ctrls); ++c)
+		if (msm_venc_ctrls[c].id == id)
+			return (struct v4l2_ctrl *)msm_venc_ctrls[c].priv;
+	return NULL;
+}
+
 static int try_set_ext_ctrl(struct msm_vidc_inst *inst,
 	struct v4l2_ext_controls *ctrl)
 {
@@ -2296,12 +2321,21 @@ static int try_set_ext_ctrl(struct msm_vidc_inst *inst,
 	struct v4l2_ext_control *control;
 	struct hfi_device *hdev;
 	struct hal_ltrmode ltrmode;
+	struct v4l2_ctrl *cluster;
 	u32 property_id = 0;
 	void *pdata = NULL;
         struct hal_initial_quantization quant;
 
 	if (!inst || !inst->core || !inst->core->device || !ctrl) {
 		dprintk(VIDC_ERR, "%s invalid parameters\n", __func__);
+		return -EINVAL;
+	}
+
+	cluster = get_cluster_from_id(ctrl->controls[0].id);
+
+	if (!cluster) {
+		dprintk(VIDC_ERR, "Invalid Ctrl returned for id: %x\n",
+			ctrl->controls[0].id);
 		return -EINVAL;
 	}
 
@@ -2352,7 +2386,7 @@ static int try_set_ext_ctrl(struct msm_vidc_inst *inst,
 				break;
 			default:
 				dprintk(VIDC_ERR, "Invalid id set: %d\n",
-						control[i].id);
+					control[i].id);
 				rc = -ENOTSUPP;
 				break;
 			}
@@ -2366,7 +2400,6 @@ static int try_set_ext_ctrl(struct msm_vidc_inst *inst,
 	}
 	return rc;
 }
-
 
 static int msm_venc_op_s_ctrl(struct v4l2_ctrl *ctrl)
 {

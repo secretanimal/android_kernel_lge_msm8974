@@ -1,4 +1,3 @@
-
 /* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -353,6 +352,8 @@ struct hfi_buffer_info {
 #define  HFI_PROPERTY_CONFIG_VENC_HIER_P_ENH_LAYER		\
 	(HFI_PROPERTY_CONFIG_VENC_COMMON_START + 0x00B)
 #define  HFI_PROPERTY_CONFIG_VENC_LTRPERIOD			\
+    (HFI_PROPERTY_CONFIG_VENC_COMMON_START + 0x00C)
+#define  HFI_PROPERTY_CONFIG_VENC_H264_LTRPERIOD			\
 	(HFI_PROPERTY_CONFIG_VENC_COMMON_START + 0x00C)
 #define HFI_PROPERTY_CONFIG_VPE_COMMON_START				\
 	(HFI_DOMAIN_BASE_VPE + HFI_ARCH_COMMON_OFFSET + 0x8000)
