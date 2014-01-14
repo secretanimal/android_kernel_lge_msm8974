@@ -108,8 +108,14 @@ struct msm_compr_audio {
 	uint32_t app_pointer;
 	uint32_t buffer_size;
 	uint32_t byte_offset;
-	uint32_t copied_total;
-	uint32_t bytes_received;
+	uint32_t copied_total; /* bytes consumed by DSP */
+	uint32_t bytes_received; /* from userspace */
+	uint32_t bytes_sent; /* to DSP */
+
+	int32_t first_buffer;
+	int32_t last_buffer;
+	int32_t partial_drain_delay;
+
 	uint16_t session_id;
 
 	uint32_t sample_rate;
@@ -212,6 +218,11 @@ static int msm_compr_send_buffer(struct msm_compr_audio *prtd)
 		__func__, buffer_length, prtd->byte_offset);
 	if (q6asm_async_write(prtd->audio_client, &param) < 0)
 		pr_err("%s:q6asm_async_write failed\n", __func__);
+	} else {
+		prtd->bytes_sent += buffer_length;
+		if (prtd->first_buffer)
+			prtd->first_buffer = 0;
+	}
 
 	return 0;
 }
@@ -300,8 +311,7 @@ static void compr_event_handler(uint32_t opcode,
 			pr_debug("ASM_SESSION_CMD_RUN_V2\n");
 
 			spin_lock(&prtd->lock);
-			/* FIXME: A state is a much better way of dealing with this */
-			if (!prtd->copied_total) {
+			if (!prtd->bytes_sent) {
 				bytes_available = prtd->bytes_received - prtd->copied_total;
 				if (bytes_available < cstream->runtime->fragment_size) {
 					pr_debug("CMD_RUN_V2 Insufficient data to send. break out\n");
@@ -488,8 +498,11 @@ static int msm_compr_configure_dsp(struct snd_compr_stream *cstream)
 	prtd->copied_total = 0;
 	prtd->app_pointer  = 0;
 	prtd->bytes_received = 0;
+    prtd->bytes_sent = 0;
 	prtd->buffer       = prtd->audio_client->port[dir].buf[0].data;
 	prtd->buffer_paddr = prtd->audio_client->port[dir].buf[0].phys;
+	//prtd->buffer       = ac->port[dir].buf[0].data;
+	//prtd->buffer_paddr = ac->port[dir].buf[0].phys;
 	prtd->buffer_size  = runtime->fragments * runtime->fragment_size;
 
 	ret = msm_compr_send_media_format_block(cstream);
@@ -537,6 +550,7 @@ static int msm_compr_open(struct snd_compr_stream *cstream)
 	prtd->session_id = prtd->audio_client->session;
 	prtd->codec = FORMAT_MP3;
 	prtd->bytes_received = 0;
+	prtd->bytes_sent = 0;
 	prtd->copied_total = 0;
 	prtd->byte_offset = 0;
 	prtd->sample_rate = 44100;
@@ -807,6 +821,8 @@ static int msm_compr_trigger(struct snd_compr_stream *cstream, int cmd)
 		prtd->copied_total = 0;
 		prtd->app_pointer  = 0;
 		prtd->bytes_received = 0;
+		prtd->bytes_sent = 0;
+
 		atomic_set(&prtd->xrun, 0);
 		spin_unlock_irqrestore(&prtd->lock, flags);
 		break;
@@ -917,7 +933,19 @@ static int msm_compr_trigger(struct snd_compr_stream *cstream, int cmd)
 					   prtd->cmd_ack, 1 * HZ / 4);
 
 			spin_lock_irqsave(&prtd->lock, flags);
+
+			/*
+			Don't reset these as these vars map to
+			total_bytes_transferred and total_bytes_available
+			directly, only total_bytes_transferred will be updated
+			in the next avail() ioctl
+			prtd->copied_total = 0;
+			prtd->bytes_received = 0;
+			do not reset prtd->bytes_sent as well as the same
+			session is used for gapless playback
+			*/
 			prtd->byte_offset = 0;
+
 			prtd->app_pointer  = 0;
                        /* Don't reset these as these vars map
                           to total_bytes_transferred and total_bytes_available directly,
