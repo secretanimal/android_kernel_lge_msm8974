@@ -189,6 +189,7 @@ enum hal_property {
 	HAL_CONFIG_VENC_LTRPERIOD,
 	HAL_CONFIG_VENC_HIER_P_NUM_FRAMES,
 	HAL_PARAM_VENC_HIER_P_MAX_ENH_LAYERS,
+    HAL_PARAM_VENC_HIER_P_NUM_FRAMES,
 	HAL_PARAM_VENC_VPX_ERROR_RESILIENCE_MODE,
 	HAL_PARAM_VENC_ENABLE_INITIAL_QP,
 	HAL_PARAM_VDEC_CONCEAL_COLOR,
@@ -1084,6 +1085,7 @@ struct vidc_hal_session_init_done {
 	struct hal_capability_supported bitrate;
 	struct hal_capability_supported hier_p;
 	struct hal_capability_supported ltr_count;
+	struct hal_capability_supported hier_p;
 	struct hal_uncompressed_format_supported uncomp_format;
 	struct hal_interlace_format_supported HAL_format;
 	struct hal_nal_stream_format_supported nal_stream_format;
