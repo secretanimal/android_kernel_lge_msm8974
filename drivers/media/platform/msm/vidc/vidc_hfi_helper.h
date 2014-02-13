@@ -322,8 +322,8 @@ struct hfi_buffer_info {
 	(HFI_PROPERTY_PARAM_VENC_COMMON_START + 0x023)
 #define HFI_PROPERTY_PARAM_VENC_HIER_P_MAX_NUM_ENH_LAYER	\
 	(HFI_PROPERTY_PARAM_VENC_COMMON_START + 0x026)
-#define HFI_PROPERTY_PARAM_VENC_INITIAL_QP      \
-        (HFI_PROPERTY_PARAM_VENC_COMMON_START + 0x028)
+#define HFI_PROPERTY_PARAM_VENC_INITIAL_QP	\
+	(HFI_PROPERTY_PARAM_VENC_COMMON_START + 0x028)
 #define HFI_PROPERTY_PARAM_VENC_VPX_ERROR_RESILIENCE_MODE	\
 	(HFI_PROPERTY_PARAM_VENC_COMMON_START + 0x029)
 #define HFI_PROPERTY_CONFIG_VENC_COMMON_START				\
@@ -545,10 +545,10 @@ struct hfi_quantization {
 };
 
 struct hfi_initial_quantization {
-        u32 qp_i;
-        u32 qp_p;
-        u32 qp_b;
-        u32 init_qp_enable;
+	u32 qp_i;
+	u32 qp_p;
+	u32 qp_b;
+	u32 init_qp_enable;
 };
 
 struct hfi_quantization_range {

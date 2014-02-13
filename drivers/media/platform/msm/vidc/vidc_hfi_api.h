@@ -638,10 +638,10 @@ struct hal_quantization {
 };
 
 struct hal_initial_quantization {
-        u32 qpi;
-        u32 qpp;
-        u32 qpb;
-        u32 init_qp_enable;
+	u32 qpi;
+	u32 qpp;
+	u32 qpb;
+	u32 init_qp_enable;
 };
 
 struct hal_quantization_range {
