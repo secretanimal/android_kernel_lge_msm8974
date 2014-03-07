@@ -695,6 +695,7 @@ struct v4l2_buffer {
 /* Cache handling flags */
 #define V4L2_BUF_FLAG_NO_CACHE_INVALIDATE       0x0800
 #define V4L2_BUF_FLAG_NO_CACHE_CLEAN            0x1000
+#define V4L2_BUF_FLAG_EOS		0x2000
 /* Timestamp type */
 #define V4L2_BUF_FLAG_TIMESTAMP_MASK            0xe000
 #define V4L2_BUF_FLAG_TIMESTAMP_UNKNOWN         0x0000
@@ -715,7 +716,7 @@ struct v4l2_buffer {
 #define V4L2_QCOM_BUF_FLAG_READONLY             0x8000000
 #define V4L2_MSM_VIDC_BUF_START_CODE_NOT_FOUND  0x10000000
 #define V4L2_MSM_BUF_FLAG_YUV_601_709_CLAMP     0x20000000
-#define V4L2_MSM_BUF_FLAG_MBAFF			0x40000000
+#define V4L2_MSM_BUF_FLAG_MBAFF			        0x40000000
 
 /*
  *	O V E R L A Y   P R E V I E W
