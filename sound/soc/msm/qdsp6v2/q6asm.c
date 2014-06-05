@@ -115,6 +115,10 @@ static int in_cont_index;
 static int out_cold_index;
 static char *out_buffer;
 static char *in_buffer;
+static struct audio_buffer common_buf[2];
+static struct audio_client common_client;
+static int set_custom_topology;
+static int topology_map_handle;
 
 int q6asm_mmap_apr_dereg(void)
 {
@@ -398,6 +402,10 @@ void send_asm_custom_topology(struct audio_client *ac)
 	struct list_head		*ptr, *next;
 	int				result;
 	int				size = 4096;
+
+	if (!set_custom_topology)
+		return;
+
 	get_asm_custom_topology(&cal_block);
 	if (cal_block.cal_size == 0) {
 		pr_debug("%s: no cal to send addr= 0x%x\n",
@@ -405,59 +413,50 @@ void send_asm_custom_topology(struct audio_client *ac)
 		goto done;
 	}
 
-	if (set_custom_topology) {
-		if (common_client.mmap_apr == NULL) {
-			common_client.mmap_apr = q6asm_mmap_apr_reg();
-			common_client.apr = common_client.mmap_apr;
-			if (common_client.mmap_apr == NULL) {
-				pr_err("%s: q6asm_mmap_apr_reg failed\n",
-					__func__);
-				result = -EPERM;
-				goto done;
-			}
-		}
-		/* Only call this once */
-		set_custom_topology = 0;
+	common_client.apr = q6asm_mmap_apr_reg();
+	common_client.mmap_apr = common_client.apr;
 
-		/* Use first asm buf to map memory */
-		if (common_client.port[IN].buf == NULL) {
-			pr_err("%s: common buf is NULL\n",
-				__func__);
-			goto done;
-		}
-		common_client.port[IN].buf->phys = cal_block.cal_paddr;
+	if (common_client.mmap_apr == NULL) {
+		pr_err("%s: q6asm_mmap_apr_reg failed\n",
+		       __func__);
+		result = -EPERM;
+		goto mmap_fail;
+	}
 
-		result = q6asm_memory_map_regions(&common_client,
-							IN, size, 1, 1);
-		if (result < 0) {
-			pr_err("%s: mmap did not work! addr = 0x%x, size = %d\n",
-				__func__, cal_block.cal_paddr,
-				cal_block.cal_size);
-			goto done;
-		}
+	/* Only call this once */
+	set_custom_topology = 0;
 
-		list_for_each_safe(ptr, next,
-				&common_client.port[IN].mem_map_handle) {
-			buf_node = list_entry(ptr, struct asm_buffer_node,
-						list);
-			if (buf_node->buf_addr_lsw == cal_block.cal_paddr) {
-				topology_map_handle =  buf_node->mmap_hdl;
-				break;
-			}
-		}
+	/* Use first asm buf to map memory */
+	if (common_client.port[IN].buf == NULL) {
+		pr_err("%s: common buf is NULL\n",
+		       __func__);
+		goto done;
+	}
+	common_client.port[IN].buf->phys = cal_block.cal_paddr;
 
-		result = q6asm_mmap_apr_dereg();
-		if (result < 0) {
-			pr_err("%s: q6asm_mmap_apr_dereg failed, err %d\n",
-				__func__, result);
-		} else {
-			common_client.mmap_apr = NULL;
+	result = q6asm_memory_map_regions(&common_client,
+					  IN, size, 1, 1);
+
+	if (result < 0) {
+		pr_err("%s: mmap did not work! addr = 0x%x, size = %d\n",
+		       __func__, cal_block.cal_paddr,
+		       cal_block.cal_size);
+		goto done;
+	}
+
+	list_for_each_safe(ptr, next,
+			   &common_client.port[IN].mem_map_handle) {
+		buf_node = list_entry(ptr, struct asm_buffer_node,
+				      list);
+		if (buf_node->buf_addr_lsw == cal_block.cal_paddr) {
+			topology_map_handle =  buf_node->mmap_hdl;
+			break;
 		}
 	}
 
 	q6asm_add_hdr_custom_topology(ac, &asm_top.hdr,
 				      APR_PKT_SIZE(APR_HDR_SIZE,
-					sizeof(asm_top)), TRUE);
+						   sizeof(asm_top)), TRUE);
 
 	asm_top.hdr.opcode = ASM_CMD_ADD_TOPOLOGIES;
 	asm_top.payload_addr_lsw = cal_block.cal_paddr;
@@ -465,9 +464,10 @@ void send_asm_custom_topology(struct audio_client *ac)
 	asm_top.mem_map_handle = topology_map_handle;
 	asm_top.payload_size = cal_block.cal_size;
 
-	 pr_debug("%s: Sending ASM_CMD_ADD_TOPOLOGIES payload = 0x%x, size = %d, map handle = 0x%x\n",
-		__func__, asm_top.payload_addr_lsw,
-		asm_top.payload_size, asm_top.mem_map_handle);
+	pr_debug("%s: Sending ASM_CMD_ADD_TOPOLOGIES payload = 0x%x,"
+		 " size = %d, map handle = 0x%x\n",
+		 __func__, asm_top.payload_addr_lsw,
+		 asm_top.payload_size, asm_top.mem_map_handle);
 
 	result = apr_send_pkt(ac->apr, (uint32_t *) &asm_top);
 	if (result < 0) {
@@ -485,6 +485,7 @@ void send_asm_custom_topology(struct audio_client *ac)
 	}
 
 done:
+mmap_fail:
 	return;
 }
 
@@ -5271,6 +5272,25 @@ static int __init q6asm_init(void)
 
 	memset(session, 0, sizeof(session));
 	set_custom_topology = 1;
+
+	/*setup common client used for cal mem map */
+	common_client.session = ASM_CONTROL_SESSION;
+	common_client.port[0].buf = &common_buf[0];
+	common_client.port[1].buf = &common_buf[1];
+	init_waitqueue_head(&common_client.cmd_wait);
+	init_waitqueue_head(&common_client.time_wait);
+	atomic_set(&common_client.time_flag, 1);
+	INIT_LIST_HEAD(&common_client.port[0].mem_map_handle);
+	INIT_LIST_HEAD(&common_client.port[1].mem_map_handle);
+	mutex_init(&common_client.cmd_lock);
+	for (lcnt = 0; lcnt <= OUT; lcnt++) {
+		mutex_init(&common_client.port[lcnt].lock);
+		spin_lock_init(&common_client.port[lcnt].dsp_lock);
+	}
+	atomic_set(&common_client.cmd_state, 0);
+	atomic_set(&common_client.nowait_cmd_cnt, 0);
+
+//	common_client.port[0].buf = &common_buf;
 
 	/*setup common client used for cal mem map */
 	common_client.session = ASM_CONTROL_SESSION;
