@@ -2552,6 +2552,13 @@ static int msm_compr_probe(struct snd_soc_platform *platform)
 		pdata->cstream[i] = NULL;
 	}
 
+	/*
+	 * use_dsp_gapless_mode part of platform data(pdata) is updated from HAL
+	 * through a mixer control before compress driver is opened. The mixer
+	 * control is used to decide if dsp gapless mode needs to be
+	 * enabled/disabled. Gapless is enabled by default.
+	 */
+	pdata->use_dsp_gapless_mode = true;
 	return 0;
 }
 
