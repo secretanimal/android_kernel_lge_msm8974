@@ -195,6 +195,7 @@ struct msm_vidc_core_capability {
 	struct hal_capability_supported hier_p;
 	struct hal_capability_supported mbs_per_frame;
 	u32 capability_set;
+	u32 buffer_size_limit;
 };
 
 struct msm_vidc_core {
