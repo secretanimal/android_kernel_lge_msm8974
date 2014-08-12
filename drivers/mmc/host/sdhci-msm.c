@@ -2924,6 +2924,7 @@ static int __devinit sdhci_msm_probe(struct platform_device *pdev)
 	#endif
 	msm_host->mmc->caps2 |= MMC_CAP2_POWEROFF_NOTIFY;
 	msm_host->mmc->caps2 |= MMC_CAP2_CLK_SCALE;
+	msm_host->mmc->caps2 |= MMC_CAP2_STOP_REQUEST;
 	msm_host->mmc->caps2 |= MMC_CAP2_ASYNC_SDIO_IRQ_4BIT_MODE;
 	msm_host->mmc->caps2 |= MMC_CAP2_CORE_PM;
 	msm_host->mmc->pm_caps |= MMC_PM_KEEP_POWER;
@@ -2946,9 +2947,9 @@ static int __devinit sdhci_msm_probe(struct platform_device *pdev)
 		}
 	}
 
-    #ifdef CONFIG_MACH_LGE
+#ifdef CONFIG_MACH_LGE
 	irq_set_irq_wake(host->mmc->hotplug.irq, 1);
-    #endif
+#endif
 
 	if (dma_supported(mmc_dev(host->mmc), DMA_BIT_MASK(32))) {
 		host->dma_mask = DMA_BIT_MASK(32);
