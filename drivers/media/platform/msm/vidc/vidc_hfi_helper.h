@@ -84,7 +84,8 @@
 #define HFI_VIDEO_CODEC_VC1				0x00000100
 #define HFI_VIDEO_CODEC_SPARK				0x00000200
 #define HFI_VIDEO_CODEC_VP8				0x00001000
-#define HFI_VIDEO_CODEC_HEVC				0x00010000
+#define HFI_VIDEO_CODEC_HEVC				0x00002000
+#define HFI_VIDEO_CODEC_HEVC_HYBRID			0x00004000
 
 #define HFI_H264_PROFILE_BASELINE			0x00000001
 #define HFI_H264_PROFILE_MAIN				0x00000002
@@ -456,6 +457,10 @@ struct hfi_operations_type {
 
 struct hfi_max_num_b_frames {
 	u32 max_num_b_frames;
+};
+
+struct hfi_conceal_color {
+	u32 conceal_color;
 };
 
 struct hfi_intra_period {

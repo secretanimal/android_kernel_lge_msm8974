@@ -21,6 +21,7 @@
 #define MSM_VENC_DVC_NAME "msm_venc_8974"
 #define MIN_NUM_OUTPUT_BUFFERS 4
 #define MIN_NUM_CAPTURE_BUFFERS 4
+//to applying the bit rate in 3G VT - sukhui.kim@lge.com
 #define MIN_BIT_RATE 32000
 #define MAX_BIT_RATE 160000000
 #define DEFAULT_BIT_RATE 64000
@@ -41,10 +42,6 @@
 
 #define L_MODE V4L2_MPEG_VIDEO_H264_LOOP_FILTER_MODE_DISABLED_AT_SLICE_BOUNDARY
 #define CODING V4L2_MPEG_VIDEO_MPEG4_PROFILE_ADVANCED_CODING_EFFICIENCY
-#define BITSTREAM_RESTRICT_ENABLED \
-	V4L2_MPEG_VIDC_VIDEO_H264_VUI_BITSTREAM_RESTRICT_ENABLED
-#define BITSTREAM_RESTRICT_DISABLED \
-	V4L2_MPEG_VIDC_VIDEO_H264_VUI_BITSTREAM_RESTRICT_DISABLED
 
 static const char *const mpeg_video_rate_control[] = {
 	"No Rate Control",
@@ -156,18 +153,6 @@ enum msm_venc_ctrl_cluster {
 };
 
 static struct msm_vidc_ctrl msm_venc_ctrls[] = {
-	{
-		.id = V4L2_CID_MPEG_VIDC_VIDEO_FRAME_RATE,
-		.name = "Frame Rate",
-		.type = V4L2_CTRL_TYPE_INTEGER,
-		.minimum = MIN_FRAME_RATE,
-		.maximum = MAX_FRAME_RATE,
-		.default_value = MIN_FRAME_RATE,
-		.step = 1,
-		.menu_skip_mask = 0,
-		.qmenu = NULL,
-		.cluster = MSM_VENC_CTRL_CLUSTER_TIMING,
-	},
 	{
 		.id = V4L2_CID_MPEG_VIDC_VIDEO_IDR_PERIOD,
 		.name = "IDR Period",
@@ -771,33 +756,56 @@ static struct msm_vidc_ctrl msm_venc_ctrls[] = {
 		.cluster = MSM_VENC_CTRL_CLUSTER_INTRA_REFRESH,
 	},
 	{
-		.id = V4L2_CID_MPEG_VIDC_VIDEO_H264_VUI_BITSTREAM_RESTRICT,
-		.name = "H264 VUI Timing Info",
+		.id = V4L2_CID_MPEG_VIDC_VIDEO_DEINTERLACE,
+		.name = "Deinterlace for encoder",
 		.type = V4L2_CTRL_TYPE_BOOLEAN,
-		.minimum = BITSTREAM_RESTRICT_DISABLED,
-		.maximum = BITSTREAM_RESTRICT_ENABLED,
-		.default_value = BITSTREAM_RESTRICT_ENABLED,
-		.cluster = 0,
+		.minimum = V4L2_CID_MPEG_VIDC_VIDEO_DEINTERLACE_DISABLED,
+		.maximum = V4L2_CID_MPEG_VIDC_VIDEO_DEINTERLACE_ENABLED,
+		.default_value = V4L2_CID_MPEG_VIDC_VIDEO_DEINTERLACE_DISABLED,
+		.step = 1,
+		.cluster = MSM_VENC_CTRL_CLUSTER_DEINTERLACE,
 	},
 	{
-		.id = V4L2_CID_MPEG_VIDC_VIDEO_PRESERVE_TEXT_QUALITY,
-		.name = "Preserve Text Qualty",
-		.type = V4L2_CTRL_TYPE_BOOLEAN,
-		.minimum = V4L2_MPEG_VIDC_VIDEO_PRESERVE_TEXT_QUALITY_DISABLED,
-		.maximum = V4L2_MPEG_VIDC_VIDEO_PRESERVE_TEXT_QUALITY_ENABLED,
-		.default_value =
-			V4L2_MPEG_VIDC_VIDEO_PRESERVE_TEXT_QUALITY_DISABLED,
-		.cluster = 0,
-	},
-	{
-		.id = V4L2_CID_MPEG_VIDC_VIDEO_REQUEST_SEQ_HEADER,
-		.name = "Request Seq Header",
+		.id = V4L2_CID_MPEG_VIDC_VIDEO_USELTRFRAME,
+		.name = "H264 Use LTR",
 		.type = V4L2_CTRL_TYPE_BUTTON,
 		.minimum = 0,
-		.maximum = 0,
+		.maximum = (MAX_LTR_FRAME_COUNT - 1),
 		.default_value = 0,
-		.step = 0,
-		.menu_skip_mask = 0,
+		.step = 1,
+		.qmenu = NULL,
+		.cluster = 0,
+	},
+	{
+		.id = V4L2_CID_MPEG_VIDC_VIDEO_LTRCOUNT,
+		.name = "Ltr Count",
+		.type = V4L2_CTRL_TYPE_INTEGER,
+		.minimum = 0,
+		.maximum = MAX_LTR_FRAME_COUNT,
+		.default_value = 0,
+		.step = 1,
+		.qmenu = NULL,
+		.cluster = MSM_VENC_CTRL_CLUSTER_USE_LTRFRAME,
+	},
+	{
+		.id = V4L2_CID_MPEG_VIDC_VIDEO_LTRMODE,
+		.name = "Ltr Mode",
+		.type = V4L2_CTRL_TYPE_INTEGER,
+		.minimum = V4L2_MPEG_VIDC_VIDEO_LTR_MODE_DISABLE,
+		.maximum = V4L2_MPEG_VIDC_VIDEO_LTR_MODE_PERIODIC,
+		.default_value = V4L2_MPEG_VIDC_VIDEO_LTR_MODE_DISABLE,
+		.step = 1,
+		.qmenu = NULL,
+		.cluster = MSM_VENC_CTRL_CLUSTER_USE_LTRFRAME,
+	},
+	{
+		.id = V4L2_CID_MPEG_VIDC_VIDEO_MARKLTRFRAME,
+		.name = "H264 Mark LTR",
+		.type = V4L2_CTRL_TYPE_BUTTON,
+		.minimum = 0,
+		.maximum = (MAX_LTR_FRAME_COUNT - 1),
+		.default_value = 0,
+		.step = 1,
 		.qmenu = NULL,
 		.cluster = 0,
 	},
@@ -1435,7 +1443,6 @@ unknown_value:
 static int try_set_ctrl(struct msm_vidc_inst *inst, struct v4l2_ctrl *ctrl)
 {
 	int rc = 0;
-	struct hal_frame_rate frame_rate;
 	struct hal_request_iframe request_iframe;
 	struct hal_bitrate bitrate;
 	struct hal_profile_level profile_level;
@@ -1450,8 +1457,6 @@ static int try_set_ctrl(struct msm_vidc_inst *inst, struct v4l2_ctrl *ctrl)
 	struct hal_enable enable;
 	struct hal_h264_vui_timing_info vui_timing_info;
 	struct hal_quantization_range qp_range;
-	struct hal_h264_vui_bitstream_restrc vui_bitstream_restrict;
-	struct hal_preserve_text_quality preserve_text_quality;
 	u32 property_id = 0, property_val = 0;
 	void *pdata = NULL;
 	struct v4l2_ctrl *temp_ctrl = NULL;
@@ -1484,13 +1489,6 @@ static int try_set_ctrl(struct msm_vidc_inst *inst, struct v4l2_ctrl *ctrl)
 	})
 
 	switch (ctrl->id) {
-	case V4L2_CID_MPEG_VIDC_VIDEO_FRAME_RATE:
-		property_id =
-			HAL_CONFIG_FRAME_RATE;
-		frame_rate.frame_rate = ctrl->val;
-		frame_rate.buffer_type = HAL_BUFFER_OUTPUT;
-		pdata = &frame_rate;
-		break;
 	case V4L2_CID_MPEG_VIDC_VIDEO_IDR_PERIOD:
 		property_id =
 			HAL_CONFIG_VENC_IDR_PERIOD;
@@ -2153,18 +2151,61 @@ static int try_set_ctrl(struct msm_vidc_inst *inst, struct v4l2_ctrl *ctrl)
 		}
 
 		break;
-	case V4L2_CID_MPEG_VIDC_VIDEO_H264_VUI_BITSTREAM_RESTRICT:
-		property_id = HAL_PARAM_VENC_H264_VUI_BITSTREAM_RESTRC;
-		vui_bitstream_restrict.enable = ctrl->val;
-		pdata = &vui_bitstream_restrict;
+	case V4L2_CID_MPEG_VIDC_VIDEO_DEINTERLACE:
+	{
+		struct v4l2_ctrl *rotation = NULL;
+		if (ctrl->val && !(inst->capability.pixelprocess_capabilities &
+			HAL_VIDEO_ENCODER_DEINTERLACE_CAPABILITY)) {
+			dprintk(VIDC_ERR, "Deinterlace not supported: 0x%x",
+					ctrl->id);
+			rc = -ENOTSUPP;
+			break;
+		}
+		rotation = TRY_GET_CTRL(V4L2_CID_MPEG_VIDC_VIDEO_ROTATION);
+		if (ctrl->val && rotation && rotation->val !=
+			V4L2_CID_MPEG_VIDC_VIDEO_ROTATION_NONE) {
+			dprintk(VIDC_ERR,
+				"Deinterlacing not supported with rotation");
+			rc = -EINVAL;
+			break;
+		}
+		property_id = HAL_CONFIG_VPE_DEINTERLACE;
+		switch (ctrl->val) {
+		case V4L2_CID_MPEG_VIDC_VIDEO_DEINTERLACE_ENABLED:
+			enable.enable = 1;
+			break;
+		case V4L2_CID_MPEG_VIDC_VIDEO_DEINTERLACE_DISABLED:
+		default:
+			enable.enable = 0;
+			break;
+		}
+		pdata = &enable;
 		break;
-	case V4L2_CID_MPEG_VIDC_VIDEO_PRESERVE_TEXT_QUALITY:
-		property_id = HAL_PARAM_VENC_PRESERVE_TEXT_QUALITY;
-		preserve_text_quality.enable = ctrl->val;
-		pdata = &preserve_text_quality;
+	}
+	case V4L2_CID_MPEG_VIDC_VIDEO_USELTRFRAME:
+		property_id = HAL_CONFIG_VENC_USELTRFRAME;
+		useltr.refltr = ctrl->val;
+		useltr.useconstrnt = false;
+		useltr.frames = 0;
+		pdata = &useltr;
 		break;
-	case V4L2_CID_MPEG_VIDC_VIDEO_REQUEST_SEQ_HEADER:
-		atomic_inc(&inst->get_seq_hdr_cnt);
+	case V4L2_CID_MPEG_VIDC_VIDEO_MARKLTRFRAME:
+		property_id = HAL_CONFIG_VENC_MARKLTRFRAME;
+		markltr.markframe = ctrl->val;
+		pdata = &markltr;
+		break;
+	case V4L2_CID_MPEG_VIDC_VIDEO_HIER_P_NUM_LAYERS:
+		property_id = HAL_PARAM_VENC_HIER_P_NUM_FRAMES;
+		hier_p_layers = ctrl->val;
+		if (hier_p_layers > (inst->capability.hier_p.max - 1)) {
+			dprintk(VIDC_ERR,
+				"Error setting hier p num layers = %d max supported by f/w = %d\n",
+				hier_p_layers,
+				inst->capability.hier_p.max - 1);
+			rc = -ENOTSUPP;
+			break;
+		}
+		pdata = &hier_p_layers;
 		break;
 	case V4L2_CID_MPEG_VIDC_VIDEO_DEINTERLACE:
 	{

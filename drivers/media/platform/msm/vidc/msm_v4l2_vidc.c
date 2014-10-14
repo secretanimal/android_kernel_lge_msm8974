@@ -405,8 +405,14 @@ static int __devinit msm_vidc_probe(struct platform_device *pdev)
 				"Failed to create pwr_collapse_delay sysfs node");
 		goto err_core_init;
 	}
+	rc = device_create_file(&pdev->dev, &dev_attr_pwr_collapse_delay);
+	if (rc) {
+		dprintk(VIDC_ERR,
+				"Failed to create pwr_collapse_delay sysfs node");
+		goto err_v4l2_register;
+	}
 	if (core->hfi_type == VIDC_HFI_Q6) {
-		dprintk(VIDC_DBG, "Q6 hfi device probe called\n");
+		dprintk(VIDC_ERR, "Q6 hfi device probe called\n");
 		nr += MSM_VIDC_MAX_DEVICES;
 		core->id = MSM_VIDC_CORE_Q6;
 	} else {

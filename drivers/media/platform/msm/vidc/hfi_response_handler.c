@@ -185,10 +185,9 @@ static void hfi_process_evt_release_buffer_ref(
 	data = (struct hfi_msg_release_buffer_ref_event_packet *)
 				pkt->rg_ext_event_data;
 
-
 	cmd_done.device_id = device_id;
-	cmd_done.session_id =
-		((struct hal_session *)data->output_tag)->session_id;
+	cmd_done.session_id = ((struct hal_session *) pkt->session_id)->
+		session_id;
 	cmd_done.status = VIDC_ERR_NONE;
 	cmd_done.size = sizeof(struct msm_vidc_cb_event);
 
@@ -622,6 +621,12 @@ enum vidc_status hfi_process_sess_init_done_prop_read(
 					case HFI_BUFFER_MODE_DYNAMIC:
 						sess_init_done->alloc_mode_out
 						|= HAL_BUFFER_MODE_DYNAMIC;
+						break;
+					}
+					if (i >= 32) {
+						dprintk(VIDC_ERR,
+						"%s - num_entries: %d from f/w seems suspect\n",
+						__func__, prop->num_entries);
 						break;
 					}
 				}

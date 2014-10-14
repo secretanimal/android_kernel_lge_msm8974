@@ -141,6 +141,10 @@
 #define VENUS_VBIF_AXI_HALT_ACK_TIMEOUT_US		500000
 /* Poll interval in uS */
 #define POLL_INTERVAL_US                                50
+<<<<<<< HEAD
+=======
+
+>>>>>>> 7195ca6... g2: Squashed kernel update
 
 #define VIDC_VENUS0_WRAPPER_VBIF_REQ_PRIORITY \
 	(VIDC_WRAPPER_BASE_OFFS + 0x20)
