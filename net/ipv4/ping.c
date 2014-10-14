@@ -894,6 +894,9 @@ int ping_recvmsg(struct kiocb *iocb, struct sock *sk, struct msghdr *msg,
 			memset(sin->sin_zero, 0, sizeof(sin->sin_zero));
 		}
 
+        *addr_len = sizeof(*sin);
+        }
+
 		if (isk->cmsg_flags)
 			ip_cmsg_recv(msg, skb);
 
@@ -914,6 +917,12 @@ int ping_recvmsg(struct kiocb *iocb, struct sock *sk, struct msghdr *msg,
 			sin6->sin6_scope_id =
 				ipv6_iface_scope_id(&sin6->sin6_addr,
 						    IP6CB(skb)->iif);
+            if (__ipv6_addr_needs_scope_id(
+                ipv6_addr_type(&sin6->sin6_addr)))
+                    sin6->sin6_scope_id =
+                        ipv6_iface_scope_id(&sin6->sin6_addr,
+						    IP6CB(skb)->iif);
+                *addr_len = sizeof(*sin6);
 		}
 
 		if (inet6_sk(sk)->rxopt.all)

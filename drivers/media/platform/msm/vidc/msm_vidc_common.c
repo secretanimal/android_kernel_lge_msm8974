@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2014, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2013, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -492,8 +492,7 @@ static void handle_session_init_done(enum command_response cmd, void *data)
 			inst->capability.mbs_per_frame =
 				session_init_done->mbs_per_frame;
 			inst->capability.capability_set = true;
-
-			inst->output_alloc_mode_supported =
+			inst->capability.buffer_mode[CAPTURE_PORT] =
 				session_init_done->alloc_mode_out;
 		} else {
 			dprintk(VIDC_ERR,
@@ -1006,7 +1005,7 @@ int buf_ref_get(struct msm_vidc_inst *inst, struct buffer_info *binfo)
 	atomic_inc(&binfo->ref_count);
 	cnt = atomic_read(&binfo->ref_count);
 	if (cnt > 2) {
-		dprintk(VIDC_ERR, "%s: invalid ref_cnt: %d\n", __func__, cnt);
+		dprintk(VIDC_DBG, "%s: invalid ref_cnt: %d\n", __func__, cnt);
 		cnt = -EINVAL;
 	}
 	dprintk(VIDC_DBG, "REF_GET[%d] fd[0] = %d\n", cnt, binfo->fd[0]);
@@ -1033,7 +1032,7 @@ int buf_ref_put(struct msm_vidc_inst *inst, struct buffer_info *binfo)
 	else if (cnt == 1)
 		qbuf_again = true;
 	else {
-		dprintk(VIDC_ERR, "%s: invalid ref_cnt: %d\n", __func__, cnt);
+		dprintk(VIDC_DBG, "%s: invalid ref_cnt: %d\n", __func__, cnt);
 		cnt = -EINVAL;
 	}
 	mutex_unlock(&inst->lock);
@@ -1074,7 +1073,7 @@ static void handle_dynamic_buffer(struct msm_vidc_inst *inst,
 	 * Update reference count and release OR queue back the buffer,
 	 * only when firmware is not holding a reference.
 	 */
-	if (inst->output_alloc_mode & HAL_BUFFER_MODE_DYNAMIC) {
+	if (inst->buffer_mode_set[CAPTURE_PORT] == HAL_BUFFER_MODE_DYNAMIC) {
 		binfo = device_to_uvaddr(inst, &inst->registered_bufs,
 				device_addr);
 		if (!binfo) {
@@ -1229,8 +1228,11 @@ static void handle_fbd(enum command_response cmd, void *data)
 			vb->v4l2_buf.flags |= V4L2_MSM_BUF_FLAG_MBAFF;
 		switch (fill_buf_done->picture_type) {
 		case HAL_PICTURE_IDR:
+// LGE_CHANGE_S, [Miracast][kyoohyun.kim@lge.com], 20130606, QCT patch for external device non-update issue
+			//vb->v4l2_buf.flags |= V4L2_QCOM_BUF_FLAG_IDRFRAME;
 			vb->v4l2_buf.flags |= V4L2_QCOM_BUF_FLAG_IDRFRAME;
-			vb->v4l2_buf.flags |= V4L2_BUF_FLAG_KEYFRAME;
+			vb->v4l2_buf.flags |= V4L2_BUF_FLAG_KEYFRAME; 
+// LGE_CHANGE_E, [Miracast][kyoohyun.kim@lge.com], 20130606, QCT patch for external device non-update issue
 			break;
 		case HAL_PICTURE_I:
 			vb->v4l2_buf.flags |= V4L2_BUF_FLAG_KEYFRAME;
@@ -1714,7 +1716,9 @@ enum hal_video_codec get_hal_codec_type(int fourcc)
 	case V4L2_PIX_FMT_HEVC:
 		codec = HAL_VIDEO_CODEC_HEVC;
 		break;
-
+	case V4L2_PIX_FMT_HEVC_HYBRID:
+		codec = HAL_VIDEO_CODEC_HEVC_HYBRID;
+		break;
 	default:
 		dprintk(VIDC_ERR, "Wrong codec: %d\n", fourcc);
 		codec = HAL_UNUSED_CODEC;
@@ -1799,6 +1803,7 @@ static int msm_vidc_load_resources(int flipped_state,
 	int num_mbs_per_sec = 0;
 	int height, width;
 
+	// LGE_CHANGE_S, [G2_Player][haewook.kim@lge.com], 20130606, final patch for multi instance
 	if (!inst || !inst->core || !inst->core->device) {
 		dprintk(VIDC_ERR, "%s invalid parameters", __func__);
 		return -EINVAL;
@@ -2550,7 +2555,6 @@ int msm_comm_qbuf(struct vb2_buffer *vb)
 					dprintk(VIDC_DBG, "Seq_hdr: %p\n",
 						inst->vb2_seq_hdr);
 				}
-				atomic_dec(&inst->get_seq_hdr_cnt);
 			} else {
 				rc = call_hfi_op(hdev, session_ftb,
 					(void *) inst->session, &frame_data);
@@ -2972,7 +2976,7 @@ void msm_comm_flush_dynamic_buffers(struct msm_vidc_inst *inst)
 	struct buffer_info *binfo = NULL, *dummy = NULL;
 	struct list_head *list = NULL;
 
-	if (!(inst->output_alloc_mode & HAL_BUFFER_MODE_DYNAMIC))
+	if (inst->buffer_mode_set[CAPTURE_PORT] != HAL_BUFFER_MODE_DYNAMIC)
 		return;
 
 	/*
@@ -3017,6 +3021,9 @@ void msm_comm_flush_dynamic_buffers(struct msm_vidc_inst *inst)
 				dprintk(VIDC_DBG,
 					"released buffer held in driver before issuing flush: 0x%x fd[0]: %d\n",
 					binfo->device_addr[0], binfo->fd[0]);
+				/*delete this buffer info from registered list*/
+				list_del(&binfo->list);
+				kfree(binfo);
 				/*send event to client*/
 				v4l2_event_queue_fh(&inst->event_handler,
 					&buf_event);
@@ -3071,7 +3078,6 @@ int msm_comm_flush(struct msm_vidc_inst *inst, u32 flags)
 	struct mutex *lock;
 	struct msm_vidc_core *core;
 	struct hfi_device *hdev;
-
 	if (!inst) {
 		dprintk(VIDC_ERR,
 				"Invalid instance pointer = %p\n", inst);
@@ -3109,6 +3115,7 @@ int msm_comm_flush(struct msm_vidc_inst *inst, u32 flags)
 	}
 
 	mutex_lock(&inst->sync_lock);
+	msm_comm_flush_dynamic_buffers(inst);
 	if (inst->in_reconfig && !ip_flush && op_flush) {
 		if (!list_empty(&inst->pendingq)) {
 			/*Execution can never reach here since port reconfig
@@ -3118,7 +3125,6 @@ int msm_comm_flush(struct msm_vidc_inst *inst, u32 flags)
 			dprintk(VIDC_WARN,
 			"FLUSH BUG: Pending q not empty! It should be empty\n");
 		}
-		msm_comm_flush_dynamic_buffers(inst);
 		rc = call_hfi_op(hdev, session_flush, inst->session,
 				HAL_FLUSH_OUTPUT);
 		if (!rc && (msm_comm_get_stream_output_mode(inst) ==
@@ -3148,8 +3154,6 @@ int msm_comm_flush(struct msm_vidc_inst *inst, u32 flags)
 				kfree(temp);
 			}
 		}
-
-		msm_comm_flush_dynamic_buffers(inst);
 
 		/*Do not send flush in case of session_error */
 		if (!(inst->state == MSM_VIDC_CORE_INVALID &&
@@ -3408,7 +3412,6 @@ int msm_vidc_check_session_supported(struct msm_vidc_inst *inst)
 				&capability->width.max,
 				&capability->height.max);
 		}
-
 		if (!rc && (inst->prop.height[CAPTURE_PORT]
 			* inst->prop.width[CAPTURE_PORT] >
 			capability->width.max * capability->height.max)) {

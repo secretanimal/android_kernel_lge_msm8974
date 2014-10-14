@@ -22,6 +22,7 @@
 
 /* Reference: HDMI 1.4a Specification section 7.1 */
 #define RETRANSMIT_MAX_NUM	5
+#define MAX_OPERAND_SIZE	15
 
 /*
  * Ref. HDMI 1.4a: Supplement-1 CEC Section 6, 7
@@ -30,7 +31,7 @@ struct hdmi_cec_msg {
 	u8 sender_id;
 	u8 recvr_id;
 	u8 opcode;
-	u8 operand[15];
+	u8 operand[MAX_OPERAND_SIZE];
 	u8 frame_size;
 	u8 retransmit;
 };
@@ -349,7 +350,8 @@ static int hdmi_cec_msg_send(struct hdmi_cec_ctrl *cec_ctrl,
 			(msg->operand[i] << 8) | frame_type);
 
 	while ((DSS_REG_R(io, HDMI_CEC_STATUS) & BIT(0)) &&
-		line_check_retry--) {
+		line_check_retry) {
+		line_check_retry--;
 		DEV_DBG("%s: CEC line is busy(%d)\n", __func__,
 			line_check_retry);
 		schedule();
@@ -364,7 +366,7 @@ static int hdmi_cec_msg_send(struct hdmi_cec_ctrl *cec_ctrl,
 	DSS_REG_W(io, HDMI_CEC_CTRL, BIT(0) | BIT(1) |
 		((msg->frame_size & 0x1F) << 4) | BIT(9));
 
-	if (!wait_for_completion_timeout(
+	if (!wait_for_completion_interruptible_timeout(
 		&cec_ctrl->cec_msg_wr_done, HZ)) {
 		DEV_ERR("%s: timedout", __func__);
 		hdmi_cec_dump_msg(cec_ctrl, msg);
@@ -738,6 +740,10 @@ static ssize_t hdmi_wta_cec_msg(struct device *dev,
 	}
 	spin_unlock_irqrestore(&cec_ctrl->lock, flags);
 
+	if (msg->frame_size > MAX_OPERAND_SIZE) {
+		DEV_ERR("%s: msg frame too big!\n", __func__);
+		return -EINVAL;
+	}
 	rc = hdmi_cec_msg_send(cec_ctrl, msg);
 	if (rc) {
 		DEV_ERR("%s: hdmi_cec_msg_send failed\n", __func__);

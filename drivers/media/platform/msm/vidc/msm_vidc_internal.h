@@ -120,7 +120,6 @@ struct msm_vidc_format {
 	u32 fourcc;
 	int num_planes;
 	int type;
-	enum buffer_mode_type buf_type;
 	u32 (*get_frame_size)(int plane, u32 height, u32 width);
 };
 
@@ -250,8 +249,7 @@ struct msm_vidc_inst {
 	enum msm_vidc_modes flags;
 	u32 multi_stream_mode;
 	struct msm_vidc_core_capability capability;
-	u32 output_alloc_mode_supported;
-	u32 output_alloc_mode;
+	enum buffer_mode_type buffer_mode_set[MAX_PORT_NUM];
 	struct list_head registered_bufs;
 	bool map_output_buffer;
 	atomic_t get_seq_hdr_cnt;

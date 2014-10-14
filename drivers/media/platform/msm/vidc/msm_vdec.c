@@ -12,16 +12,16 @@
  */
 
 #include <linux/slab.h>
-
+#include <mach/scm.h>
 #include "msm_vidc_internal.h"
 #include "msm_vidc_common.h"
 #include "vidc_hfi_api.h"
 #include "msm_smem.h"
 #include "msm_vidc_debug.h"
-#include <mach/scm.h>
 
 #define MSM_VDEC_DVC_NAME "msm_vdec_8974"
 #define MIN_NUM_OUTPUT_BUFFERS 4
+#ifdef CONFIG_MACH_LGE
 #define MAX_NUM_OUTPUT_BUFFERS VIDEO_MAX_FRAME
 #define DEFAULT_VIDEO_CONCEAL_COLOR_BLACK 0x8080
 #define MB_SIZE_IN_PIXEL (16 * 16)
@@ -451,6 +451,14 @@ struct msm_vidc_format vdec_formats[] = {
 		.name = "HEVC",
 		.description = "HEVC compressed format",
 		.fourcc = V4L2_PIX_FMT_HEVC,
+		.num_planes = 1,
+		.get_frame_size = get_frame_size_compressed,
+		.type = OUTPUT_PORT,
+	},
+	{
+		.name = "HEVC_HYBRID",
+		.description = "HEVC compressed format",
+		.fourcc = V4L2_PIX_FMT_HEVC_HYBRID,
 		.num_planes = 1,
 		.get_frame_size = get_frame_size_compressed,
 		.type = OUTPUT_PORT,
@@ -923,6 +931,7 @@ int msm_vdec_s_fmt(struct msm_vidc_inst *inst, struct v4l2_format *f)
 		return -EINVAL;
 	}
 	if (f->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE) {
+
 		fmt = msm_comm_get_pixel_fmt_fourcc(vdec_formats,
 			ARRAY_SIZE(vdec_formats), f->fmt.pix_mp.pixelformat,
 			CAPTURE_PORT);
@@ -1151,6 +1160,18 @@ static int msm_vdec_queue_setup(struct vb2_queue *q,
 				"Failed to set new buffer count(%d) on FW, err: %d\n",
 				new_buf_count.buffer_count_actual, rc);
 		}
+		// LGE_CHANGE_S, [G2_Player][haewook.kim@lge.com], 20130626, msm vdec Update firmware with input buffer count
+		property_id = HAL_PARAM_BUFFER_COUNT_ACTUAL;
+		new_buf_count.buffer_type = HAL_BUFFER_INPUT;
+		new_buf_count.buffer_count_actual = *num_buffers;
+		rc = call_hfi_op(hdev, session_set_property,
+		inst->session, property_id, &new_buf_count);
+		if (rc) {
+			dprintk(VIDC_WARN,
+					"Failed to set new buffer count(%d) on FW, err: %d\n",
+			new_buf_count.buffer_count_actual, rc);
+		}
+		// LGE_CHANGE_E, [G2_Player][haewook.kim@lge.com], 20130626, msm vdec Update firmware with input buffer count
 		break;
 	case V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE:
 		dprintk(VIDC_DBG, "Getting bufreqs on capture plane\n");
@@ -1537,10 +1558,27 @@ int msm_vdec_inst_init(struct msm_vidc_inst *inst)
 	inst->capability.height.max = DEFAULT_HEIGHT;
 	inst->capability.width.min = MIN_SUPPORTED_WIDTH;
 	inst->capability.width.max = DEFAULT_WIDTH;
+	inst->capability.buffer_mode[OUTPUT_PORT] = HAL_BUFFER_MODE_STATIC;
+	inst->capability.buffer_mode[CAPTURE_PORT] = HAL_BUFFER_MODE_STATIC;
+	inst->buffer_mode_set[OUTPUT_PORT] = HAL_BUFFER_MODE_STATIC;
+	inst->buffer_mode_set[CAPTURE_PORT] = HAL_BUFFER_MODE_STATIC;
 	inst->prop.fps = 30;
-	inst->fmts[CAPTURE_PORT]->buf_type = V4L2_MPEG_VIDC_VIDEO_STATIC;
-	inst->fmts[OUTPUT_PORT]->buf_type = V4L2_MPEG_VIDC_VIDEO_STATIC;
 	return rc;
+}
+
+static inline enum buffer_mode_type get_buf_type(int val)
+{
+	switch (val) {
+	case V4L2_MPEG_VIDC_VIDEO_STATIC:
+		return HAL_BUFFER_MODE_STATIC;
+	case V4L2_MPEG_VIDC_VIDEO_RING:
+		return HAL_BUFFER_MODE_RING;
+	case V4L2_MPEG_VIDC_VIDEO_DYNAMIC:
+		return HAL_BUFFER_MODE_DYNAMIC;
+	default:
+		dprintk(VIDC_ERR, "%s: invalid buf type: %d", __func__, val);
+	}
+	return 0;
 }
 
 static int check_tz_dynamic_buffer_support(void)
@@ -1663,13 +1701,15 @@ static int try_set_ctrl(struct msm_vidc_inst *inst, struct v4l2_ctrl *ctrl)
 
 		break;
 	case V4L2_CID_MPEG_VIDC_VIDEO_ALLOC_MODE_INPUT:
-		if (ctrl->val == V4L2_MPEG_VIDC_VIDEO_DYNAMIC)
+		if (ctrl->val == V4L2_MPEG_VIDC_VIDEO_DYNAMIC) {
 			rc = -ENOTSUPP;
+			break;
+		}
 		property_id = HAL_PARAM_BUFFER_ALLOC_MODE;
-		alloc_mode.buffer_mode = ctrl->val;
+		alloc_mode.buffer_mode = get_buf_type(ctrl->val);
 		alloc_mode.buffer_type = HAL_BUFFER_INPUT;
+		inst->buffer_mode_set[OUTPUT_PORT] = alloc_mode.buffer_mode;
 		pdata = &alloc_mode;
-		inst->fmts[OUTPUT_PORT]->buf_type = alloc_mode.buffer_mode;
 		break;
 	case V4L2_CID_MPEG_VIDC_VIDEO_FRAME_ASSEMBLY:
 	{
@@ -1680,27 +1720,87 @@ static int try_set_ctrl(struct msm_vidc_inst *inst, struct v4l2_ctrl *ctrl)
 	}
 	case V4L2_CID_MPEG_VIDC_VIDEO_ALLOC_MODE_OUTPUT:
 		property_id = HAL_PARAM_BUFFER_ALLOC_MODE;
-		if (ctrl->val == V4L2_MPEG_VIDC_VIDEO_RING)
+		alloc_mode.buffer_mode = get_buf_type(ctrl->val);
+		if (!(alloc_mode.buffer_mode &
+			inst->capability.buffer_mode[CAPTURE_PORT])) {
+			dprintk(VIDC_DBG,
+				"buffer mode[%d] not supported for Capture Port\n",
+				ctrl->val);
 			rc = -ENOTSUPP;
-		else if (ctrl->val == V4L2_MPEG_VIDC_VIDEO_DYNAMIC &&
-			!(inst->output_alloc_mode_supported &
-			HAL_BUFFER_MODE_DYNAMIC)) {
-				dprintk(VIDC_DBG,
-					"Dynamic buffer mode not supported for Capture Port\n");
+			break;
+		}
+		if ((alloc_mode.buffer_mode == HAL_BUFFER_MODE_DYNAMIC) &&
+			(inst->flags & VIDC_SECURE) &&
+			check_tz_dynamic_buffer_support()) {
 				rc = -ENOTSUPP;
-		} else {
-			if ((inst->flags & VIDC_SECURE) &&
-				check_tz_dynamic_buffer_support()) {
-				rc = -ENOTSUPP;
-			} else {
-				alloc_mode.buffer_mode = ctrl->val;
-				alloc_mode.buffer_type = HAL_BUFFER_OUTPUT;
-				pdata = &alloc_mode;
-				inst->output_alloc_mode =
-					alloc_mode.buffer_mode;
-				inst->fmts[CAPTURE_PORT]->buf_type =
-					alloc_mode.buffer_mode;
+				break;
+		}
+		alloc_mode.buffer_type = HAL_BUFFER_OUTPUT;
+		pdata = &alloc_mode;
+		inst->buffer_mode_set[CAPTURE_PORT] = alloc_mode.buffer_mode;
+		break;
+	case V4L2_CID_MPEG_VIDC_VIDEO_STREAM_OUTPUT_MODE:
+		if (ctrl->val && !(inst->capability.pixelprocess_capabilities &
+				HAL_VIDEO_DECODER_MULTI_STREAM_CAPABILITY)) {
+			dprintk(VIDC_ERR, "Downscaling not supported: 0x%x",
+				ctrl->id);
+			rc = -ENOTSUPP;
+			break;
+		}
+		switch (ctrl->val) {
+		case V4L2_CID_MPEG_VIDC_VIDEO_STREAM_OUTPUT_PRIMARY:
+			multi_stream.buffer_type = HAL_BUFFER_OUTPUT;
+			multi_stream.enable = true;
+			pdata = &multi_stream;
+			rc = call_hfi_op(hdev, session_set_property, (void *)
+				inst->session, HAL_PARAM_VDEC_MULTI_STREAM,
+				pdata);
+			if (rc) {
+				dprintk(VIDC_ERR,
+					"Failed : Enabling OUTPUT port : %d\n",
+					rc);
+				break;
 			}
+			multi_stream.buffer_type = HAL_BUFFER_OUTPUT2;
+			multi_stream.enable = false;
+			pdata = &multi_stream;
+			rc = call_hfi_op(hdev, session_set_property, (void *)
+				inst->session, HAL_PARAM_VDEC_MULTI_STREAM,
+				pdata);
+			if (rc)
+				dprintk(VIDC_ERR,
+					"Failed:Disabling OUTPUT2 port : %d\n",
+					rc);
+			break;
+		case V4L2_CID_MPEG_VIDC_VIDEO_STREAM_OUTPUT_SECONDARY:
+			multi_stream.buffer_type = HAL_BUFFER_OUTPUT2;
+			multi_stream.enable = true;
+			pdata = &multi_stream;
+			rc = call_hfi_op(hdev, session_set_property, (void *)
+				inst->session, HAL_PARAM_VDEC_MULTI_STREAM,
+				pdata);
+			if (rc) {
+				dprintk(VIDC_ERR,
+					"Failed :Enabling OUTPUT2 port : %d\n",
+					rc);
+				break;
+			}
+			multi_stream.buffer_type = HAL_BUFFER_OUTPUT;
+			multi_stream.enable = false;
+			pdata = &multi_stream;
+			rc = call_hfi_op(hdev, session_set_property, (void *)
+				inst->session, HAL_PARAM_VDEC_MULTI_STREAM,
+				pdata);
+			if (rc)
+				dprintk(VIDC_ERR,
+					"Failed :Disabling OUTPUT port : %d\n",
+					rc);
+			break;
+		default:
+			dprintk(VIDC_ERR,
+				"Failed : Unsupported multi stream setting\n");
+			rc = -ENOTSUPP;
+			break;
 		}
 		break;
 	case V4L2_CID_MPEG_VIDC_VIDEO_CONCEAL_COLOR:

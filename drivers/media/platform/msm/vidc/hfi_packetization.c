@@ -584,7 +584,6 @@ int create_pkt_cmd_session_ftb(struct hfi_cmd_session_fill_buffer_packet *pkt,
 	pkt->alloc_len = output_frame->alloc_len;
 	pkt->filled_len = output_frame->filled_len;
 	pkt->offset = output_frame->offset;
-	pkt->output_tag = session_id;
 	pkt->rgData[0] = output_frame->extradata_size;
 	dprintk(VIDC_DBG, "### Q OUTPUT BUFFER ###: %d, %d, %d\n",
 			pkt->alloc_len, pkt->filled_len, pkt->offset);
@@ -1476,21 +1475,22 @@ int create_pkt_cmd_session_set_property(
 	}
 	case HAL_PARAM_VENC_H264_VUI_BITSTREAM_RESTRC:
 	{
-		struct hfi_enable *hfi;
-		struct hal_h264_vui_bitstream_restrc *hal = pdata;
-
+		struct hfi_ltrmode *hfi;
+		struct hal_ltrmode *hal = pdata;
 		pkt->rg_property_data[0] =
-			HFI_PROPERTY_PARAM_VENC_H264_VUI_BITSTREAM_RESTRC;
-		hfi = (struct hfi_enable *) &pkt->rg_property_data[1];
-		hfi->enable = hal->enable;
-		pkt->size += sizeof(u32) + sizeof(struct hfi_enable);
+			HFI_PROPERTY_PARAM_VENC_LTRMODE;
+		hfi = (struct hfi_ltrmode *) &pkt->rg_property_data[1];
+		hfi->ltrmode = get_hfi_ltr_mode(hal->ltrmode);
+		hfi->ltrcount = hal->ltrcount;
+		hfi->trustmode = hal->trustmode;
+		pkt->size += sizeof(u32) + sizeof(struct hfi_ltrmode);
+		pr_err("SET LTR\n");
 		break;
 	}
-	case HAL_PARAM_VENC_PRESERVE_TEXT_QUALITY:
+	case HAL_CONFIG_VENC_USELTRFRAME:
 	{
-		struct hfi_enable *hfi;
-		struct hal_preserve_text_quality *hal = pdata;
-
+		struct hfi_ltruse *hfi;
+		struct hal_ltruse *hal = pdata;
 		pkt->rg_property_data[0] =
 			HFI_PROPERTY_PARAM_VENC_PRESERVE_TEXT_QUALITY;
 		hfi = (struct hfi_enable *) &pkt->rg_property_data[1];

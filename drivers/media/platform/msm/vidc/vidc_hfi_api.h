@@ -182,6 +182,7 @@ enum hal_property {
 	HAL_PARAM_VDEC_FRAME_ASSEMBLY,
 	HAL_PARAM_VENC_H264_VUI_BITSTREAM_RESTRC,
 	HAL_PARAM_VENC_PRESERVE_TEXT_QUALITY,
+	HAL_PARAM_VDEC_CONCEAL_COLOR,
 	HAL_PARAM_VENC_LTRMODE,
 	HAL_CONFIG_VENC_MARKLTRFRAME,
 	HAL_CONFIG_VENC_USELTRFRAME,
@@ -232,7 +233,8 @@ enum hal_video_codec {
 	HAL_VIDEO_CODEC_VP6      = 0x00000400,
 	HAL_VIDEO_CODEC_VP7      = 0x00000800,
 	HAL_VIDEO_CODEC_VP8      = 0x00001000,
-	HAL_VIDEO_CODEC_HEVC     = 0x00010000,
+	HAL_VIDEO_CODEC_HEVC     = 0x00002000,
+	HAL_VIDEO_CODEC_HEVC_HYBRID     = 0x00004000,
 	HAL_UNUSED_CODEC = 0x10000000,
 };
 
@@ -831,14 +833,6 @@ struct hal_h264_vui_timing_info {
 	u32 time_scale;
 };
 
-struct hal_h264_vui_bitstream_restrc {
-	u32 enable;
-};
-
-struct hal_preserve_text_quality {
-	u32 enable;
-};
-
 enum vidc_resource_id {
 	VIDC_RESOURCE_OCMEM = 0x00000001,
 	VIDC_UNUSED_RESORUCE = 0x10000000,
@@ -915,9 +909,9 @@ enum hal_event_type {
 };
 
 enum buffer_mode_type {
-	HAL_BUFFER_MODE_STATIC,
-	HAL_BUFFER_MODE_RING,
-	HAL_BUFFER_MODE_DYNAMIC,
+	HAL_BUFFER_MODE_STATIC = 0x001,
+	HAL_BUFFER_MODE_RING = 0x010,
+	HAL_BUFFER_MODE_DYNAMIC = 0x100,
 };
 
 struct hal_buffer_alloc_mode {
@@ -948,6 +942,10 @@ struct hal_ltrmark {
 };
 /* HAL Response */
 
+struct hal_ltrmark {
+	u32 markframe;
+};
+/* HAL Response */
 enum command_response {
 /* SYSTEM COMMANDS_DONE*/
 	VIDC_EVENT_CHANGE,
@@ -1090,7 +1088,7 @@ struct vidc_hal_session_init_done {
 	struct hal_nal_stream_format_supported nal_stream_format;
 	struct hal_intra_refresh intra_refresh;
 	struct hal_seq_header_info seq_hdr_info;
-	u32 alloc_mode_out;
+	enum buffer_mode_type alloc_mode_out;
 };
 
 struct buffer_requirements {
