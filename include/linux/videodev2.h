@@ -1984,10 +1984,6 @@ enum v4l2_mpeg_vidc_video_mvc_layout {
 
 #define V4L2_CID_MPEG_VIDC_VIDEO_DEINTERLACE \
                 (V4L2_CID_MPEG_MSM_VIDC_BASE + 50)
-enum v4l2_mpeg_vidc_video_deinterlace {
-        V4L2_CID_MPEG_VIDC_VIDEO_DEINTERLACE_DISABLED = 0,
-        V4L2_CID_MPEG_VIDC_VIDEO_DEINTERLACE_ENABLED = 1
-};
 
 #define V4L2_CID_MPEG_VIDC_VIDEO_MPEG2_LEVEL    (V4L2_CID_MPEG_MSM_VIDC_BASE+51)
 enum v4l2_mpeg_vidc_video_mpeg2_level {
