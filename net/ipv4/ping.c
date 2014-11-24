@@ -895,7 +895,6 @@ int ping_recvmsg(struct kiocb *iocb, struct sock *sk, struct msghdr *msg,
 		}
 
         *addr_len = sizeof(*sin);
-        }
 
 		if (isk->cmsg_flags)
 			ip_cmsg_recv(msg, skb);
